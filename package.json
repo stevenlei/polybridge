@@ -1,0 +1,27 @@
+{
+  "name": "polymer-simple-bridge",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:optimism": "hardhat run scripts/deploy.js --network optimismSepolia",
+    "deploy:base": "hardhat run scripts/deploy.js --network baseSepolia",
+    "relayer": "node scripts/simple-relayer.js",
+    "test": "hardhat run scripts/test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.7",
+    "ethers": "^6.13.4",
+    "inquirer": "^12.3.0"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.1"
+  }
+}
