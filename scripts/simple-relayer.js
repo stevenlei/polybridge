@@ -23,13 +23,13 @@ class ChainConnection {
     this.wallet = wallet.connect(this.provider);
     this.contract = new ethers.Contract(
       config.contractAddress,
-      require("../artifacts/contracts/PolymerBridge.sol/PolymerBridge.json").abi, // we should always use the parent contract, as this relayer handles events from that contract
+      require("../artifacts/contracts/PolyBridge.sol/PolyBridge.json").abi, // we should always use the parent contract, as this relayer handles events from that contract
       this.wallet
     );
   }
 }
 
-class PolymerBridgeRelayer {
+class PolyBridgeRelayer {
   constructor(polymerApiUrl, polymerApiKey) {
     this.polymerApiUrl = polymerApiUrl;
     this.polymerApiKey = polymerApiKey;
@@ -277,7 +277,7 @@ async function main() {
   const chainA = new ChainConnection(chainAConfig, wallet);
   const chainB = new ChainConnection(chainBConfig, wallet);
 
-  const relayer = new PolymerBridgeRelayer(
+  const relayer = new PolyBridgeRelayer(
     POLYMER_API_URL,
     process.env.POLYMER_API_KEY
   );

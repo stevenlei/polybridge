@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./PolymerBridge.sol";
+import "./PolyBridge.sol";
 
-contract ExampleContract is PolymerBridge {
+contract ExampleContract is PolyBridge {
     // Just one number to update
     uint256 public number;
 
@@ -15,7 +15,7 @@ contract ExampleContract is PolymerBridge {
 
     event NumberUpdated(uint256 oldValue, uint256 newValue, string step);
 
-    constructor(address _polymerProver) PolymerBridge(_polymerProver) {
+    constructor(address _polymerProver) PolyBridge(_polymerProver) {
         // Register functions that can be called cross-chain
         registerFunction(UPDATE_NUMBER_STEP_2);
         registerFunction(UPDATE_NUMBER_STEP_3);

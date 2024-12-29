@@ -17,10 +17,10 @@ interface IPolymerProver {
 }
 
 /**
- * @title PolymerBridge
+ * @title PolyBridge
  * @dev A protocol for bridging between chains using Polymer Protocol's Prover, allowing for method calls to be relayed between chains with the relayer
  */
-abstract contract PolymerBridge {
+abstract contract PolyBridge {
     IPolymerProver public immutable polymerProver;
 
     enum BridgeState {

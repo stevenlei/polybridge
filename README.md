@@ -86,15 +86,15 @@ npm run test
 
 ### Core Components
 
-1. **PolymerBridge Contract**
+1. **PolyBridge Contract**
 
    Base contract for cross-chain messaging. To use this contract:
 
-   1. Inherit from `PolymerBridge`:
+   1. Inherit from `PolyBridge`:
 
       ```solidity
-      contract YourContract is PolymerBridge {
-         constructor(address _polymerProver) PolymerBridge(_polymerProver) {}
+      contract YourContract is PolyBridge {
+         constructor(address _polymerProver) PolyBridge(_polymerProver) {}
       }
       ```
 
