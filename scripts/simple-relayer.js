@@ -16,52 +16,51 @@ if (!CHAIN_A || !CHAIN_B) {
 
 const CHAINS = require("../config/chains");
 
-// Contract ABI
-const CONTRACT_ABI =
-  require("../artifacts/contracts/SimpleBridgeProtocol.sol/SimpleBridgeProtocol.json").abi;
-
 class ChainConnection {
   constructor(config, wallet) {
     this.config = config;
     this.provider = new ethers.JsonRpcProvider(config.rpcUrl);
+    this.wallet = wallet.connect(this.provider);
     this.contract = new ethers.Contract(
       config.contractAddress,
-      CONTRACT_ABI,
-      wallet.connect(this.provider)
+      require("../artifacts/contracts/PolymerBridge.sol/PolymerBridge.json").abi, // we should always use the parent contract, as this relayer handles events from that contract
+      this.wallet
     );
   }
 }
 
-class SimpleRelayer {
-  constructor(chainAConfig, chainBConfig, wallet) {
-    this.chainA = new ChainConnection(chainAConfig, wallet);
-    this.chainB = new ChainConnection(chainBConfig, wallet);
+class PolymerBridgeRelayer {
+  constructor(polymerApiUrl, polymerApiKey) {
+    this.polymerApiUrl = polymerApiUrl;
+    this.polymerApiKey = polymerApiKey;
     this.processedEvents = new Set();
   }
 
-  async start() {
+  async start(sourceChain, destChain) {
     console.log(
       chalk.blue(
-        `Starting bidirectional relayer between:\nChain A: ${chalk.bold(
-          this.chainA.config.name
-        )}\nChain B: ${chalk.bold(this.chainB.config.name)}`
+        `\nStarting bidirectional relayer between ${chalk.bold(
+          sourceChain.config.name
+        )} and ${chalk.bold(destChain.config.name)}`
       )
     );
 
-    // Monitor Chain A for actions to relay to Chain B
-    this.monitorChain(this.chainA, this.chainB);
-
-    // Monitor Chain B for actions to relay to Chain A
-    this.monitorChain(this.chainB, this.chainA);
+    // Monitor both chains for ActionInitiated events
+    this.monitorChain(sourceChain, destChain);
+    this.monitorChain(destChain, sourceChain);
   }
 
   monitorChain(sourceChain, destChain) {
+    console.log(
+      chalk.yellow(`Listening to ${chalk.bold(sourceChain.config.name)}...`)
+    );
+
     // Listen for ActionInitiated events
     sourceChain.contract.on(
       "ActionInitiated",
-      async (actionId, initiator, payload, event) => {
+      async (actionId, initiator, function_, eventData, event) => {
         const eventId = `${event.log.blockHash}-${event.log.transactionHash}-${event.log.index}`;
-        if (this.processedEvents.has(eventId)) return;
+        if (this.processedEvents.has(eventId)) return; // Skip if we've already processed this event
 
         console.log(
           chalk.blue(
@@ -70,32 +69,10 @@ class SimpleRelayer {
         );
         console.log(chalk.cyan(`Action ID: ${chalk.bold(actionId)}`));
         console.log(chalk.cyan(`Initiator: ${chalk.bold(initiator)}`));
+        console.log(chalk.cyan(`Function: ${chalk.bold(function_)}`));
+        console.log(chalk.cyan(`Event Data: ${chalk.bold(eventData)}`));
 
         await this.relayAction(sourceChain, destChain, event);
-        this.processedEvents.add(eventId);
-      }
-    );
-
-    // Listen for ActionCompleted events
-    sourceChain.contract.on(
-      "ActionCompleted",
-      async (actionId, success, event) => {
-        const eventId = `${event.log.blockHash}-${event.log.transactionHash}-${event.log.index}`;
-        if (this.processedEvents.has(eventId)) return;
-
-        console.log(
-          success
-            ? chalk.green(
-                `\n✅ Action completed on ${chalk.bold(
-                  sourceChain.config.name
-                )}:`
-              )
-            : chalk.red(
-                `\n❌ Action failed on ${chalk.bold(sourceChain.config.name)}:`
-              )
-        );
-        console.log(chalk.cyan(`Action ID: ${chalk.bold(actionId)}`));
-
         this.processedEvents.add(eventId);
       }
     );
@@ -103,15 +80,40 @@ class SimpleRelayer {
 
   async relayAction(sourceChain, destChain, event) {
     try {
-      const block = await sourceChain.provider.getBlock(event.log.blockNumber);
       const receipt = await event.log.getTransactionReceipt();
+
+      // Get the position of the event in the block, we need this to request the proof
       const positionInBlock = receipt.index;
 
+      // Find the index of ActionInitiated event in the logs, we need this to validate the proof
+      const actionInitiatedIndex = receipt.logs.findIndex(
+        (log) =>
+          log.topics[0] === event.log.topics[0] &&
+          log.logIndex === event.log.logIndex
+      );
+
       console.log(chalk.yellow(`\n>  Requesting proof from Polymer API...`));
+      console.log(
+        chalk.cyan(`Block Number: ${chalk.bold(event.log.blockNumber)}`)
+      );
+      console.log(
+        chalk.cyan(`Position in Block: ${chalk.bold(positionInBlock)}`)
+      );
+      console.log(
+        chalk.cyan(`Source Chain ID: ${chalk.bold(sourceChain.config.chainId)}`)
+      );
+      console.log(
+        chalk.cyan(`Dest Chain ID: ${chalk.bold(destChain.config.chainId)}`)
+      );
+      console.log(
+        chalk.cyan(
+          `Action Initiated Index: ${chalk.bold(actionInitiatedIndex)}`
+        )
+      );
 
       // Request proof generation
       const proofRequest = await axios.post(
-        POLYMER_API_URL,
+        this.polymerApiUrl,
         {
           jsonrpc: "2.0",
           id: 1,
@@ -125,7 +127,7 @@ class SimpleRelayer {
         },
         {
           headers: {
-            Authorization: `Bearer ${process.env.POLYMER_API_KEY}`,
+            Authorization: `Bearer ${this.polymerApiKey}`,
           },
         }
       );
@@ -144,7 +146,6 @@ class SimpleRelayer {
       // Wait for the proof to be generated
       console.log(chalk.yellow(`>  Waiting for proof to be generated...`));
 
-      // Check proof after 10 seconds for the first time, then every 5 seconds
       let proofResponse;
       let attempts = 0;
       const maxAttempts = 10;
@@ -161,7 +162,7 @@ class SimpleRelayer {
         );
 
         proofResponse = await axios.post(
-          POLYMER_API_URL,
+          this.polymerApiUrl,
           {
             jsonrpc: "2.0",
             id: 1,
@@ -170,7 +171,7 @@ class SimpleRelayer {
           },
           {
             headers: {
-              Authorization: `Bearer ${process.env.POLYMER_API_KEY}`,
+              Authorization: `Bearer ${this.polymerApiKey}`,
             },
           }
         );
@@ -191,12 +192,47 @@ class SimpleRelayer {
 
       // Validate and execute
       console.log(chalk.yellow("\n>  Validating proof..."));
-      const validateTx = await destChain.contract.validateProof(0, proofBytes);
-      const validateReceipt = await validateTx.wait();
-      console.log(chalk.green("✅ Proof validated"));
+      try {
+        const tx = await destChain.contract.validateProof(
+          actionInitiatedIndex,
+          proofBytes
+        );
+        const receipt = await tx.wait();
+        console.log(chalk.green("✅ Proof validated"));
 
-      // Get the validated action ID
-      const validatedEvent = validateReceipt.logs
+        // Get the validated action ID from the receipt
+        const validatedEvent = receipt.logs
+          .map((log) => {
+            try {
+              return destChain.contract.interface.parseLog(log);
+            } catch (e) {
+              return null;
+            }
+          })
+          .find((event) => event && event.name === "ActionValidated");
+
+        if (!validatedEvent) {
+          throw new Error("Could not find ActionValidated event");
+        }
+
+        const validatedActionId = validatedEvent.args[0];
+        console.log(chalk.yellow("\n>  Executing action..."));
+
+        const executeTx = await destChain.contract.executeValidatedAction(
+          validatedActionId
+        );
+        await executeTx.wait();
+        console.log(chalk.green("✅ Action executed"));
+      } catch (error) {
+        console.error(chalk.red("Error relaying action:"), error.message);
+        if (error.error) {
+          console.error(chalk.red("Error details:"), error.error);
+        }
+        return;
+      }
+
+      // Check if there's a next action to chain
+      const chainedEvent = receipt.logs
         .map((log) => {
           try {
             return destChain.contract.interface.parseLog(log);
@@ -204,20 +240,18 @@ class SimpleRelayer {
             return null;
           }
         })
-        .find((event) => event && event.name === "ActionValidated");
+        .find((event) => event && event.name === "ActionChained");
 
-      if (!validatedEvent) {
-        throw new Error("Could not find ActionValidated event");
+      if (chainedEvent) {
+        const [previousActionId, nextActionId, initiator, nextFunction] =
+          chainedEvent.args;
+        console.log(chalk.yellow("\n>  Action chained, calling next..."));
+        console.log(
+          chalk.cyan(`Previous Action ID: ${chalk.bold(previousActionId)}`)
+        );
+        console.log(chalk.cyan(`Next Action ID: ${chalk.bold(nextActionId)}`));
+        console.log(chalk.cyan(`Next Function: ${chalk.bold(nextFunction)}`));
       }
-
-      const validatedActionId = validatedEvent.args[0];
-      console.log(chalk.yellow("\n>  Executing action..."));
-
-      const executeTx = await destChain.contract.executeValidatedAction(
-        validatedActionId
-      );
-      await executeTx.wait();
-      console.log(chalk.green("✅ Action executed"));
     } catch (error) {
       console.error(chalk.red("Error relaying action:"), error.message);
     }
@@ -240,8 +274,14 @@ async function main() {
     process.exit(1);
   }
 
-  const relayer = new SimpleRelayer(chainAConfig, chainBConfig, wallet);
-  await relayer.start();
+  const chainA = new ChainConnection(chainAConfig, wallet);
+  const chainB = new ChainConnection(chainBConfig, wallet);
+
+  const relayer = new PolymerBridgeRelayer(
+    POLYMER_API_URL,
+    process.env.POLYMER_API_KEY
+  );
+  await relayer.start(chainA, chainB);
 }
 
 main().catch((error) => {

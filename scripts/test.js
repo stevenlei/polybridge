@@ -1,77 +1,45 @@
 require("dotenv").config();
 const hre = require("hardhat");
+const { ethers } = require("hardhat");
 const chalk = require("chalk");
-
-// Contract ABI
-const CONTRACT_ABI =
-  require("../artifacts/contracts/ExampleContract.sol/ExampleContract.json").abi;
 
 async function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitForBridgeCompletion(
-  contract,
-  sourceActionId,
-  maxAttempts = 60
-) {
-  console.log(chalk.yellow("\nWaiting for relayer to process..."));
-  let destinationActionId = null;
+function setupNumberUpdateListener(contract, chainName, highestNumber) {
+  contract.on("NumberUpdated", async (oldValue, newValue, step) => {
+    console.log(chalk.yellow(`\n${chainName} Update (${step}):`));
 
-  // First wait for ActionValidated event to get the destination actionId
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    try {
-      // Check for ActionValidated events
-      const filter = contract.filters.ActionValidated();
-      const events = await contract.queryFilter(filter, -100); // Last 100 blocks
-
-      for (const event of events) {
-        // Check if this event is related to our action
-        const [destActionId, initiator, proofHash] = event.args;
-        if (!destinationActionId) {
-          console.log(chalk.cyan("Found validated action:", destActionId));
-          destinationActionId = destActionId;
-        }
-
-        // Now wait for the string to be updated with this actionId
-        const [value, state, timestamp] = await contract.getString(
-          destinationActionId
-        );
-
-        if (value !== "") {
-          // Check for completion event
-          const completedFilter =
-            contract.filters.StringUpdateCompleted(destinationActionId);
-          const completedEvents = await contract.queryFilter(completedFilter);
-
-          if (completedEvents.length > 0) {
-            console.log(chalk.green("\nString update completed successfully!"));
-            console.log(chalk.cyan("Final string value on Chain B:", value));
-            return { success: true, destinationActionId };
-          }
-        }
-      }
-
+    if (step === "step1") {
       console.log(
-        chalk.yellow(
-          `Waiting for validation... (attempt ${attempt + 1}/${maxAttempts})`
+        chalk.grey(
+          "Update the number to 1 on Chain A, and call the bridge() function to execute the increment function on Chain B"
         )
       );
-
-      await sleep(10000);
-    } catch (error) {
+    } else if (step === "step2") {
       console.log(
-        chalk.yellow(
-          `Error checking status (attempt ${attempt + 1}/${maxAttempts}):`,
-          error.message
+        chalk.grey(
+          "the number get incremented on Chain B, and call the bridge() function to execute the increment function on Chain A"
         )
       );
-      await sleep(5000);
+    } else if (step === "step3") {
+      console.log(chalk.grey("Finally, the number get incremented on Chain A"));
     }
-  }
 
-  console.log(chalk.red("\nTimeout waiting for completion"));
-  return { success: false, destinationActionId };
+    console.log(chalk.cyan(`Value: ${newValue}`));
+
+    if (newValue > highestNumber.value) {
+      highestNumber.value = newValue;
+    }
+
+    if (highestNumber.value >= 3) {
+      console.log(
+        chalk.green("\n✅ Number has reached 3! Test completed successfully!")
+      );
+      process.exit(0);
+    }
+  });
 }
 
 async function main() {
@@ -89,70 +57,55 @@ async function main() {
   );
 
   // Connect to Chain A
-  const providerA = new hre.ethers.JsonRpcProvider(chainA.rpcUrl);
-  const walletA = new hre.ethers.Wallet(process.env.PRIVATE_KEY, providerA);
-  const contractA = new hre.ethers.Contract(
+  const providerA = new ethers.JsonRpcProvider(chainA.rpcUrl);
+  const walletA = new ethers.Wallet(process.env.PRIVATE_KEY, providerA);
+  const contractA = new ethers.Contract(
     chainA.contractAddress,
-    CONTRACT_ABI,
+    require("../artifacts/contracts/ExampleContract.sol/ExampleContract.json").abi,
     walletA
   );
 
   // Connect to Chain B
-  const providerB = new hre.ethers.JsonRpcProvider(chainB.rpcUrl);
-  const walletB = new hre.ethers.Wallet(process.env.PRIVATE_KEY, providerB);
-  const contractB = new hre.ethers.Contract(
+  const providerB = new ethers.JsonRpcProvider(chainB.rpcUrl);
+  const walletB = new ethers.Wallet(process.env.PRIVATE_KEY, providerB);
+  const contractB = new ethers.Contract(
     chainB.contractAddress,
-    CONTRACT_ABI,
+    require("../artifacts/contracts/ExampleContract.sol/ExampleContract.json").abi,
     walletB
   );
 
-  // Test string to update
-  const testString = "Hello from Chain A! " + new Date().toISOString();
-
   try {
-    console.log(chalk.yellow("Initiating string update on Chain A..."));
-    const tx = await contractA.updateString(testString);
-    console.log(chalk.cyan("Transaction sent:", tx.hash));
+    // Set up event listeners for both chains
+    console.log(chalk.yellow("\nSetting up event listeners..."));
 
-    const receipt = await tx.wait();
-    console.log(chalk.green("Transaction confirmed!"));
+    // Track the highest number we've seen (using an object for reference sharing)
+    const highestNumber = { value: 0 };
 
-    // Get the source actionId from the event
-    const event = receipt.logs.find(
-      (log) =>
-        log.topics[0] ===
-        contractA.interface.getEvent("StringUpdateStarted").topicHash
-    );
-    const sourceActionId = event.topics[1];
-    console.log(chalk.cyan("Source Action ID:", sourceActionId));
+    // Set up listeners for both chains
+    setupNumberUpdateListener(contractA, "Chain A", highestNumber);
+    setupNumberUpdateListener(contractB, "Chain B", highestNumber);
 
-    // Get the string value from Chain A
-    const [valueA] = await contractA.getString(sourceActionId);
-    console.log(chalk.cyan("String value on Chain A:", valueA));
+    // Start the chain on Contract A
+    console.log(chalk.yellow("\nInitiating first number update on Chain A..."));
+    const tx1 = await contractA.updateNumberStep1_calledByClientOnChainA(1);
+    await tx1.wait();
 
-    // Wait for completion
-    const { success, destinationActionId } = await waitForBridgeCompletion(
-      contractB,
-      sourceActionId
-    );
-
-    if (success && destinationActionId) {
-      // Compare final values
-      const [valueA] = await contractA.getString(sourceActionId);
-      const [valueB] = await contractB.getString(destinationActionId);
-      console.log(chalk.cyan("\nFinal string values:"));
-      console.log(chalk.cyan("Chain A:", valueA));
-      console.log(chalk.cyan("Chain B:", valueB));
-    }
-
-    process.exit(success ? 0 : 1);
+    // Keep the script running
+    await new Promise((resolve) => {
+      setTimeout(() => {
+        console.log(chalk.red("\n❌ Test timed out after 10 minutes!"));
+        process.exit(1);
+      }, 60 * 10 * 1000); // 10 minutes timeout
+    });
   } catch (error) {
-    console.error(chalk.red("Error:"), error);
+    console.error(chalk.red("\nError during test:"), error);
     process.exit(1);
   }
 }
 
-main().catch((error) => {
-  console.error(chalk.red("Error in main:"), error);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

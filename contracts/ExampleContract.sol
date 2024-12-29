@@ -1,85 +1,81 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./SimpleBridgeProtocol.sol";
+import "./PolymerBridge.sol";
 
-/**
- * @title ExampleContract
- * @dev A simple example that syncs a string value across chains
- */
-contract ExampleContract is SimpleBridgeProtocol {
-    // Store string values with their action IDs
-    mapping(bytes32 => string) public strings;
+contract ExampleContract is PolymerBridge {
+    // Just one number to update
+    uint256 public number;
 
-    // Events for tracking string updates
-    event StringUpdateStarted(
-        bytes32 indexed actionId,
-        string oldValue,
-        string newValue
-    );
+    // Function selectors
+    bytes4 public constant UPDATE_NUMBER_STEP_2 =
+        bytes4(keccak256("updateNumberStep2_calledByRelayerOnChainB(uint256)"));
+    bytes4 public constant UPDATE_NUMBER_STEP_3 =
+        bytes4(keccak256("updateNumberStep3_calledByRelayerOnChainA(uint256)"));
 
-    event StringUpdateCompleted(bytes32 indexed actionId, string value);
+    event NumberUpdated(uint256 oldValue, uint256 newValue, string step);
 
-    constructor(address _polymerProver) SimpleBridgeProtocol(_polymerProver) {}
-
-    /**
-     * @dev Update string value and sync it to another chain
-     * @param newValue The new string value to set
-     */
-    function updateString(string calldata newValue) external returns (bytes32) {
-        // Prepare the payload (just the string value in this case)
-        bytes memory payload = abi.encode(newValue);
-
-        // Initiate the action and get the action ID
-        bytes32 actionId = initiateAction(payload);
-
-        // Store the string on the source chain
-        strings[actionId] = newValue;
-
-        emit StringUpdateStarted(actionId, strings[actionId], newValue);
-
-        return actionId;
+    constructor(address _polymerProver) PolymerBridge(_polymerProver) {
+        // Register functions that can be called cross-chain
+        registerFunction(UPDATE_NUMBER_STEP_2);
+        registerFunction(UPDATE_NUMBER_STEP_3);
     }
 
     /**
-     * @dev Hook called when executing the action (on destination chain)
-     * Updates the string value on the destination chain
+     * @dev Step 1: Update number on chain A and bridge to chain B
      */
-    function _executeAction(
-        bytes32 actionId,
-        bytes memory payload
-    ) internal override returns (bool) {
-        require(payload.length > 0, "Empty payload");
+    function updateNumberStep1_calledByClientOnChainA(
+        uint256 initialValue
+    ) external returns (bytes32) {
+        uint256 oldValue = number;
+        number = initialValue;
+        emit NumberUpdated(oldValue, initialValue, "step1");
 
-        string memory newValue = abi.decode(payload, (string));
+        // Bridge to chain B, calling updateNumber2
+        return bridge(UPDATE_NUMBER_STEP_2, abi.encode(initialValue));
+    }
 
-        // Store the string on the destination chain
-        strings[actionId] = newValue;
-        emit StringUpdateCompleted(actionId, newValue);
+    /**
+     * @dev Step 2: Called on chain B, updates number and bridges back to chain A
+     */
+    function updateNumberStep2_calledByRelayerOnChainB(
+        uint256 value
+    ) public returns (bool) {
+        uint256 oldValue = number;
+        number = value + 1;
+        emit NumberUpdated(oldValue, number, "step2");
 
+        // Bridge back to chain A, calling updateNumber3
+        bridge(UPDATE_NUMBER_STEP_3, abi.encode(number));
         return true;
     }
 
     /**
-     * @dev Helper function to decode payload in a way that can be caught if it fails
+     * @dev Step 3: Final update on chain A
      */
-    function decodePayload(
-        bytes memory payload
-    ) external pure returns (string memory) {
-        return abi.decode(payload, (string));
+    function updateNumberStep3_calledByRelayerOnChainA(
+        uint256 value
+    ) public returns (bool) {
+        uint256 oldValue = number;
+        number = value + 1;
+        emit NumberUpdated(oldValue, number, "step3");
+        return true;
     }
 
     /**
-     * @dev Get the string value for a specific action
+     * @dev Execute bridged function calls
      */
-    function getString(
-        bytes32 actionId
-    )
-        external
-        view
-        returns (string memory value, BridgeState state, uint256 timestamp)
-    {
-        BridgeAction memory action = actions[actionId];
-        return (strings[actionId], action.state, action.timestamp);
+    function _executeFunction(
+        bytes4 selector,
+        bytes memory payload
+    ) internal override returns (bool) {
+        if (selector == UPDATE_NUMBER_STEP_2) {
+            uint256 value = abi.decode(payload, (uint256));
+            return updateNumberStep2_calledByRelayerOnChainB(value);
+        } else if (selector == UPDATE_NUMBER_STEP_3) {
+            uint256 value = abi.decode(payload, (uint256));
+            return updateNumberStep3_calledByRelayerOnChainA(value);
+        }
+        revert("Unknown function selector");
     }
 }
