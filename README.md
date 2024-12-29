@@ -105,7 +105,7 @@ npm run test
       registerFunction(bytes4(keccak256("yourFunction(uint256)")));
       ```
 
-   3. Call `bridge()` to initiate cross-chain actions:
+   3. Call `bridge()` to initiate cross-chain actions which will be validated and executed by the relayer:
 
       ```solidity
       // In your function
