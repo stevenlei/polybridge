@@ -10,13 +10,27 @@ Polybridge is a sophisticated cross-chain messaging protocol built on top of [Po
 - 🎯 **Action Tracking**: Track the state of actions across multiple chains
 - 🔍 **Detailed Event Logging**: Clear visibility into cross-chain operations
 
-## Example Flow
+## Examples
 
-The example contract demonstrates a number increment across chains:
+### 1. Cross-Chain Counter
+
+A simple example demonstrating number increment across chains:
 
 1. Client initiates on Chain A (value = 1)
 2. Relayer bridges to Chain B (value = 2)
 3. Relayer bridges back to Chain A (value = 3)
+
+### 2. Cross-Chain NFT Bridge
+
+A more complex example showing NFT bridging between chains:
+
+1. Client mints NFT on Chain A
+2. Bridge to Chain B:
+   - Client initiates the bridge and locks NFT on Chain A
+   - Relayer mints and locks NFT on Chain B
+3. Complete Bridge:
+   - Relayer burns NFT on Chain A
+   - Relayer unlocks NFT on Chain B
 
 ## Getting Started
 
@@ -59,15 +73,20 @@ The example contract demonstrates a number increment across chains:
    POLYMER_API_KEY=
    ```
 
-   `OPTIMISM_SEPOLIA_CONTRACT_ADDRESS` and `BASE_SEPOLIA_CONTRACT_ADDRESS` will be set automatically after contract deployment.
+   `OPTIMISM_SEPOLIA_CONTRACT_ADDRESS` and `BASE_SEPOLIA_CONTRACT_ADDRESS` will be set automatically after contract deployment, please note that both examples use the same contract address env variables for simplicity.
 
 ### Running Tests
 
 **Deploy Contracts**
 
 ```bash
-npm run deploy:optimism
-npm run deploy:base
+# For Counter Example
+npm run deploy:counter:optimism
+npm run deploy:counter:base
+
+# For NFT Example
+npm run deploy:nft:optimism
+npm run deploy:nft:base
 ```
 
 **Start the relayer**
@@ -79,7 +98,11 @@ npm run relayer
 **Run the test**
 
 ```bash
-npm run test
+# For Counter Example
+npm run test:counter
+
+# For NFT Example
+npm run test:nft
 ```
 
 ## Architecture
@@ -133,33 +156,50 @@ npm run test
 
            // Call the target function
            return targetFunction(value);
-       }
-       revert("Unknown function selector");
+         }
+         revert("Unknown function selector");
       }
       ```
 
-2. **Example Contract**
-
-   Demonstrates a complete cross-chain number update flow:
-
-   - `updateNumberStep1_calledByClientOnChainA`: Client initiates on Chain A
-   - `updateNumberStep2_calledByRelayerOnChainB`: Relayer executes on Chain B
-   - `updateNumberStep3_calledByRelayerOnChainA`: Relayer completes on Chain A
-
-   Each step:
-
-   1. Updates a number value
-   2. Emits an event for tracking
-   3. Bridges to the next chain if needed
-
-   _The function names are intentionally verbose for better readability._
-
-3. **Relayer**
+2. **Relayer**
 
    - Monitors chains for events
    - Requests proofs from Polymer API
    - Submit proofs to destination chain
    - Handles bidirectional message passing
+
+## Example Contracts
+
+### 1. Cross-Chain Counter
+
+Located in `contracts/example/CrossChainCounter.sol`, demonstrates a complete counter bridge flow:
+
+- `updateNumberStep1_calledByClientOnChainA`: Client initiates on Chain A
+- `updateNumberStep2_calledByRelayerOnChainB`: Relayer executes on Chain B
+- `updateNumberStep3_calledByRelayerOnChainA`: Relayer completes on Chain A
+
+Each step:
+
+1.  Updates a number value
+2.  Emits an event for tracking
+3.  Bridges to the next chain if needed
+
+_The function names are intentionally verbose for better readability._
+
+### 2. Cross-Chain NFT Bridge
+
+Located in `contracts/example/CrossChainNFT.sol`, demonstrates a complete NFT bridge flow:
+
+- `mintOnChainA`: Client mints NFT on Chain A
+- `bridgeToChainB`: Client mints NFT on Chain A
+- `mintOnChainB`: Relayer mints and locks NFT on Chain B
+- `burnOnChainA`: Relayer burns NFT on Chain A
+- `unlockOnChainB`: Relayer unlocks NFT on Chain B
+
+Each step:
+
+1.  Emits an event for tracking
+2.  Bridges to the next chain if needed
 
 ## Disclaimer
 
