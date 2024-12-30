@@ -61,7 +61,7 @@ async function main() {
   const walletA = new ethers.Wallet(process.env.PRIVATE_KEY, providerA);
   const contractA = new ethers.Contract(
     chainA.contractAddress,
-    require("../artifacts/contracts/ExampleContract.sol/ExampleContract.json").abi,
+    require("../artifacts/contracts/example/CrossChainCounter.sol/CrossChainCounter.json").abi,
     walletA
   );
 
@@ -70,7 +70,7 @@ async function main() {
   const walletB = new ethers.Wallet(process.env.PRIVATE_KEY, providerB);
   const contractB = new ethers.Contract(
     chainB.contractAddress,
-    require("../artifacts/contracts/ExampleContract.sol/ExampleContract.json").abi,
+    require("../artifacts/contracts/example/CrossChainCounter.sol/CrossChainCounter.json").abi,
     walletB
   );
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./PolyBridge.sol";
+import "../PolyBridge.sol";
 
-contract ExampleContract is PolyBridge {
+contract CrossChainCounter is PolyBridge {
     // Just one number to update
     uint256 public number;
 

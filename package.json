@@ -4,16 +4,20 @@
   "main": "index.js",
   "scripts": {
     "compile": "hardhat compile",
-    "deploy:optimism": "hardhat run scripts/deploy.js --network optimismSepolia",
-    "deploy:base": "hardhat run scripts/deploy.js --network baseSepolia",
     "relayer": "node scripts/simple-relayer.js",
-    "test": "hardhat run scripts/test.js"
+    "deploy:counter:optimism": "hardhat run scripts/deploy-counter.js --network optimismSepolia",
+    "deploy:counter:base": "hardhat run scripts/deploy-counter.js --network baseSepolia",
+    "deploy:nft:optimism": "hardhat run scripts/deploy-nft.js --network optimismSepolia",
+    "deploy:nft:base": "hardhat run scripts/deploy-nft.js --network baseSepolia",
+    "test:counter": "hardhat run scripts/test-counter.js",
+    "test:nft": "hardhat run scripts/test-nft.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
     "axios": "^1.6.2",
     "chalk": "^4.1.2",
     "dotenv": "^16.4.7",

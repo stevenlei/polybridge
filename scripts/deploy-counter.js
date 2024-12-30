@@ -40,16 +40,16 @@ async function main() {
     )
   );
 
-  console.log(chalk.yellow("📄 Deploying ExampleContract..."));
-  const ExampleContract = await hre.ethers.getContractFactory(
-    "ExampleContract"
+  console.log(chalk.yellow("📄 Deploying CrossChainCounter..."));
+  const CrossChainCounter = await hre.ethers.getContractFactory(
+    "CrossChainCounter"
   );
-  const store = await ExampleContract.deploy(polymerProverAddress);
+  const store = await CrossChainCounter.deploy(polymerProverAddress);
   await store.waitForDeployment();
 
   const address = await store.getAddress();
   console.log(
-    chalk.green(`✅ ExampleContract deployed to: ${chalk.bold(address)}`)
+    chalk.green(`✅ CrossChainCounter deployed to: ${chalk.bold(address)}`)
   );
 
   // Wait for a few block confirmations
